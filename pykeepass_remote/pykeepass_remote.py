@@ -1,5 +1,7 @@
 import rpyc
 from rpyc.utils.server import ThreadedServer
+from rpyc.utils.factory import unix_connect
+from rpyc.lib.compat import get_exc_errno
 from os.path import getmtime
 from datetime import datetime
 import daemon
@@ -8,13 +10,13 @@ import time
 import socket
 import sys
 import os
+import stat
 import errno
-from rpyc.lib.compat import get_exc_errno
 import traceback
 
 import logging
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger('pykeepass_remote')
 
 class MyService(rpyc.Service):
 
@@ -23,6 +25,9 @@ class MyService(rpyc.Service):
 
     def exposed_PyKeePass(self, filename, password=None, keyfile=None,
                  transformed_key=None):
+
+        # expand filename to full path
+        filename = os.path.realpath(filename)
 
         # import pykeepass here to avoid importing all support libs clientside
         from pykeepass import PyKeePass
@@ -41,6 +46,7 @@ class MyServer(ThreadedServer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.socket_path = kwargs['socket_path']
         self.listener_timeout = kwargs['listener_timeout']
 
     def accept(self):
@@ -49,10 +55,11 @@ class MyServer(ThreadedServer):
         while self.active:
             try:
                 sock, addrinfo = self.listener.accept()
-                # timeout after client connects
+                # set/reset timeout after client connects
                 self.listener.settimeout(self.listener_timeout)
             except socket.timeout:
-                # instead of passing, quit
+                # remove socket and quit
+                os.remove(self.socket_path)
                 sys.exit()
             except socket.error:
                 ex = sys.exc_info()[1]
@@ -69,50 +76,61 @@ class MyServer(ThreadedServer):
         self._accept_method(sock)
 
 
-def _fork_and_run(func, *, timeout, host, port):
+def _fork_and_run(func, *, timeout, socket_path):
     """Start server if not already running.  Execute `func` remotely."""
 
     starting_path = os.getcwd()
 
     # if server is running, connect to it
     try:
-        conn = rpyc.connect(host, port)
+        conn = unix_connect(socket_path)
         return func(conn)
 
-    except ConnectionRefusedError:
+    except (FileNotFoundError, ConnectionRefusedError):
+
+        # handle ConnectionRefusedError - clean up old socket
+        if os.path.exists(socket_path):
+            if stat.S_ISSOCK(os.stat(socket_path).st_mode):
+                os.remove(socket_path)
+            else:
+                log.warning('Encountered regular file at {}'.format(socket_path))
 
         # otherwise, fork server, then connect to it
         pid = os.fork()
 
         # parent process, run server as unix daemon
         if pid == 0:
-            with daemon.DaemonContext():
-                os.chdir(starting_path)
-                server = MyServer(
-                    MyService,
-                    port=port,
-                    protocol_config={"allow_all_attrs": True},
-                    # initial timeout before any client connects
-                    listener_timeout=timeout
-                )
-                server.start()
+            try:
+                with daemon.DaemonContext():
+                    os.chdir(starting_path)
+                    server = MyServer(
+                        MyService,
+                        socket_path=socket_path,
+                        protocol_config={"allow_all_attrs": True},
+                        # initial timeout before any client connects
+                        listener_timeout=timeout
+                    )
+                    server.start()
+            except Exception:
+                import traceback
+                open('/tmp/pykeepass_server_exception', 'w').write(traceback.format_exc())
 
         # child process
         else:
             # FIXME: is there a more robust way to start the client after the server?
+            # maybe wait for existence of socket_path
             time.sleep(1)
-            conn = rpyc.connect(host, port)
+            conn = unix_connect(socket_path)
             return func(conn)
 
 
-def cached_databases(timeout=60, host='127.0.0.1', port=4444):
+def cached_databases(timeout=300, socket_path='/tmp/pykeepass.sock'):
     """
     Return a list of cached databases on the server
 
     Args:
-        timeout (int): seconds until server shuts down
-        host (str): listening ip of server
-        port (int): listening port of server
+        timeout (int): seconds until server shuts down, use None to run forever
+        socket_path (str): desired path of socket for backend communication
 
     Returns:
         dictionary of currently opened PyKeePass databases on server,
@@ -120,11 +138,11 @@ def cached_databases(timeout=60, host='127.0.0.1', port=4444):
     """
 
     func = lambda conn: conn.root.databases
-    return _fork_and_run(func, timeout=timeout, host=host, port=port)
+    return _fork_and_run(func, timeout=timeout, socket_path=socket_path)
 
 
 def PyKeePass(filename, password=None, keyfile=None, transformed_key=None,
-              timeout=60, host='127.0.0.1', port=4444):
+              timeout=300, socket_path='/tmp/pykeepass.sock'):
     """
     Cache and open a PyKeePass database.  Drop-in replacement for pykeepass.PyKeePass.
 
@@ -140,12 +158,11 @@ def PyKeePass(filename, password=None, keyfile=None, transformed_key=None,
         transformed_key (str): same as pykeepass.PyKeePass
 
         timeout (int): seconds until server shuts down
-        host (str): listening ip of server
-        port (int): listening port of server
+        socket_path (str): desired path of socket for backend communication
 
     Returns:
         PyKeePass object
     """
 
     func = lambda conn: conn.root.PyKeePass(filename, password, keyfile, transformed_key)
-    return _fork_and_run(func, timeout=timeout, host=host, port=port)
+    return _fork_and_run(func, timeout=timeout, socket_path=socket_path)
