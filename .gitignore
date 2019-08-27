@@ -2,4 +2,4 @@ __pycache__/
 **.pyc
 build/
 dist/
-pykeepass_remote.egg-info/
+pykeepass_cache.egg-info/

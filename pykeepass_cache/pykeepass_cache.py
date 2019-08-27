@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+# Evan Widloski - 2019-08-27
+# pykeepass-cache - transparent caching for pykeepass
+
 import rpyc
 from rpyc.utils.server import ThreadedServer
 from rpyc.utils.factory import unix_connect
@@ -50,7 +54,10 @@ class MyServer(ThreadedServer):
         self.listener_timeout = kwargs['listener_timeout']
 
     def accept(self):
-        """Copied from rpyc server.py"""
+        """ Copied from rpyc server.py
+        Modified to shutdown server when socket times out and reset
+        socket timer when client connects
+        """
 
         while self.active:
             try:
@@ -77,7 +84,8 @@ class MyServer(ThreadedServer):
 
 
 def _fork_and_run(func, *, timeout, socket_path):
-    """Start server if not already running.  Execute `func` remotely."""
+    """Connect to server and execute `func` remotely.
+    Start server if not already running."""
 
     starting_path = os.getcwd()
 
@@ -126,7 +134,7 @@ def _fork_and_run(func, *, timeout, socket_path):
 
 def cached_databases(timeout=300, socket_path='/tmp/pykeepass.sock'):
     """
-    Return a list of cached databases on the server
+    Return a dict of cached databases on the server
 
     Args:
         timeout (int): seconds until server shuts down, use None to run forever
@@ -134,7 +142,7 @@ def cached_databases(timeout=300, socket_path='/tmp/pykeepass.sock'):
 
     Returns:
         dictionary of currently opened PyKeePass databases on server,
-            keyed by the filename used to open the database
+            keyed by the full path to the database
     """
 
     func = lambda conn: conn.root.databases
@@ -147,8 +155,8 @@ def PyKeePass(filename, password=None, keyfile=None, transformed_key=None,
     Cache and open a PyKeePass database.  Drop-in replacement for pykeepass.PyKeePass.
 
     If the server isn't running, it will be started automatically.  If the
-    database is already open (as determined by the `filename` arg), it will
-    be returned and the given credentials will not be used.
+    database is already open (as determined by the full path to the database),
+    it will be returned and the given credentials will not be used.
 
 
     Args:

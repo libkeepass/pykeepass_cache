@@ -6,6 +6,12 @@ This is useful in situations where the program is terminated between invocations
 
 ### Usage
 
+Install
+
+``` bash
+pip install pykeepass-cache
+```
+
 Use as a drop-in replacement for `pykeepass.PyKeePass`:
 
 ``` python
@@ -29,6 +35,15 @@ Configure background server timeout, socket path:
 
 ``` python
 >>> kp = PyKeePass('test.kdbx', 'password', 'keyfile.key', timeout=60, socket_path='/tmp/pykeepass.sock)
+```
+
+Get a dictionary of currently cached databases:
+
+``` python
+>>> from pykeepass_cache import PyKeePass, cached_databases
+>>> kp = PyKeePass('test.kdbx', 'password', 'keyfile.key')
+>>> cached_databases()
+{'/home/evan/resources/pykeepass_cache/tests/test.kdbx': <pykeepass.pykeepass.PyKeePass object at 0x7f4b85678dd8>}
 ```
 
 ### Tests
