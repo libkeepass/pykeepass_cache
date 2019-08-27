@@ -16,7 +16,7 @@ import traceback
 
 import logging
 
-log = logging.getLogger('pykeepass_remote')
+log = logging.getLogger('pykeepass_cache')
 
 class MyService(rpyc.Service):
 

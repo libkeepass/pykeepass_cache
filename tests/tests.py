@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-from pykeepass_remote import PyKeePass as PyKeePass_orig
-from pykeepass_remote import cached_databases as cached_databases_orig
+from pykeepass_cache import PyKeePass as PyKeePass_orig
+from pykeepass_cache import cached_databases as cached_databases_orig
 import timeit
 import os
 
@@ -25,7 +25,7 @@ def cached_databases():
 
 timeit_str = """
 import os
-from pykeepass_remote import PyKeePass
+from pykeepass_cache import PyKeePass
 base_dir = os.path.dirname(os.path.realpath('{}'))
 PyKeePass(
     os.path.join(base_dir, 'test4.kdbx'),
