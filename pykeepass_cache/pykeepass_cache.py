@@ -91,7 +91,7 @@ def _fork_and_run(func, *, timeout, socket_path):
 
     # if server is running, connect to it
     try:
-        conn = unix_connect(socket_path)
+        conn = unix_connect(socket_path, config={'allow_all_attrs': True})
         return func(conn)
 
     except (FileNotFoundError, ConnectionRefusedError):
@@ -126,9 +126,9 @@ def _fork_and_run(func, *, timeout, socket_path):
         # child process
         else:
             # FIXME: is there a more robust way to start the client after the server?
-            # maybe wait for existence of socket_path
-            time.sleep(1)
-            conn = unix_connect(socket_path)
+            while not os.path.exists(socket_path):
+                time.sleep(0.05)
+            conn = unix_connect(socket_path, config={'allow_all_attrs': True})
             return func(conn)
 
 
