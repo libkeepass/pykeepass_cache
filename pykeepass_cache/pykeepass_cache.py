@@ -6,7 +6,7 @@ import rpyc
 from rpyc.utils.server import ThreadedServer
 from rpyc.utils.factory import unix_connect
 from rpyc.lib.compat import get_exc_errno
-from os.path import getmtime
+from os.path import getmtime, abspath, expanduser, expandvars
 from datetime import datetime
 import daemon
 import time
@@ -31,7 +31,7 @@ class MyService(rpyc.Service):
                  transformed_key=None):
 
         # expand filename to full path
-        filename = os.path.realpath(filename)
+        filename = abspath(expanduser(expandvars(filename)))
 
         # import pykeepass here to avoid importing all support libs clientside
         from pykeepass import PyKeePass
@@ -91,7 +91,14 @@ def _fork_and_run(func, *, timeout, socket_path):
 
     # if server is running, connect to it
     try:
-        conn = unix_connect(socket_path, config={'allow_all_attrs': True})
+        conn = unix_connect(
+            socket_path,
+            config={
+                'allow_all_attrs': True,
+                'allow_set_attr': True,
+                'allow_get_attr': True,
+            },
+        )
         return func(conn)
 
     except (FileNotFoundError, ConnectionRefusedError):
@@ -114,7 +121,11 @@ def _fork_and_run(func, *, timeout, socket_path):
                     server = MyServer(
                         MyService,
                         socket_path=socket_path,
-                        protocol_config={"allow_all_attrs": True},
+                        protocol_config={
+                            'allow_all_attrs': True,
+                            'allow_set_attr': True,
+                            'allow_get_attr': True,
+                        },
                         # initial timeout before any client connects
                         listener_timeout=timeout
                     )
@@ -128,11 +139,18 @@ def _fork_and_run(func, *, timeout, socket_path):
             # FIXME: is there a more robust way to start the client after the server?
             while not os.path.exists(socket_path):
                 time.sleep(0.05)
-            conn = unix_connect(socket_path, config={'allow_all_attrs': True})
+            conn = unix_connect(
+                socket_path,
+                config={
+                    'allow_all_attrs': True,
+                    'allow_set_attr': True,
+                    'allow_get_attr': True,
+                },
+            )
             return func(conn)
 
 
-def cached_databases(timeout=300, socket_path='/tmp/pykeepass.sock'):
+def cached_databases(timeout=600, socket_path='/tmp/pykeepass.sock'):
     """
     Return a dict of cached databases on the server
 
@@ -150,7 +168,7 @@ def cached_databases(timeout=300, socket_path='/tmp/pykeepass.sock'):
 
 
 def PyKeePass(filename, password=None, keyfile=None, transformed_key=None,
-              timeout=300, socket_path='/tmp/pykeepass.sock'):
+              timeout=600, socket_path='/tmp/pykeepass.sock'):
     """
     Cache and open a PyKeePass database.  Drop-in replacement for pykeepass.PyKeePass.
 
