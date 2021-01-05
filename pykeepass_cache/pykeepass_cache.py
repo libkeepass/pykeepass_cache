@@ -50,6 +50,7 @@ class MyServer(ThreadedServer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.service.server = self
         self.socket_path = kwargs['socket_path']
         self.listener_timeout = kwargs['listener_timeout']
 
@@ -65,9 +66,7 @@ class MyServer(ThreadedServer):
                 # set/reset timeout after client connects
                 self.listener.settimeout(self.listener_timeout)
             except socket.timeout:
-                # remove socket and quit
-                os.remove(self.socket_path)
-                sys.exit()
+                self.close()
             except socket.error:
                 ex = sys.exc_info()[1]
                 if get_exc_errno(ex) in (errno.EINTR, errno.EAGAIN):
@@ -82,10 +81,25 @@ class MyServer(ThreadedServer):
         self.clients.add(sock)
         self._accept_method(sock)
 
+    def close(self):
+        # remove socket and quit
+        super().close()
+        os.remove(self.socket_path)
+        sys.exit()
 
-def _fork_and_run(func, *, timeout, socket_path):
-    """Connect to server and execute `func` remotely.
-    Start server if not already running."""
+
+def _fork_and_run(func, *, timeout, socket_path, no_start=False):
+    """
+    Connect to server and execute `func` remotely. Start server if not already running.
+
+    Args:
+        timeout (int): seconds until server shuts down, use None to run forever
+        socket_path (str): desired path of socket for backend communication
+        no_start (bool): don't start the background server
+
+    Returns:
+        return value of `func`
+    """
 
     starting_path = os.getcwd()
 
@@ -102,6 +116,10 @@ def _fork_and_run(func, *, timeout, socket_path):
         return func(conn)
 
     except (FileNotFoundError, ConnectionRefusedError):
+
+        # if no_start provided and server not running, do nothing
+        if no_start:
+            return
 
         # handle ConnectionRefusedError - clean up old socket
         if os.path.exists(socket_path):
@@ -192,3 +210,24 @@ def PyKeePass(filename, password=None, keyfile=None, transformed_key=None,
 
     func = lambda conn: conn.root.PyKeePass(filename, password, keyfile, transformed_key)
     return _fork_and_run(func, timeout=timeout, socket_path=socket_path)
+
+
+def close(timeout=600, socket_path='/tmp/pykeepass.sock'):
+    """
+    Shut down background server
+
+    Args:
+        timeout (int): seconds until server shuts down, use None to run forever
+        socket_path (str): desired path of socket for backend communication
+    """
+
+    func = lambda conn: conn.root.server.close()
+    try:
+        _fork_and_run(
+            func,
+            timeout=timeout,
+            socket_path=socket_path,
+            no_start=True
+        )
+    except EOFError:
+        pass

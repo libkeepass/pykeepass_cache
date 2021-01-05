@@ -46,6 +46,13 @@ Get a dictionary of currently cached databases:
 {'/home/evan/resources/pykeepass_cache/tests/test.kdbx': <pykeepass.pykeepass.PyKeePass object at 0x7f4b85678dd8>}
 ```
 
+Manually kill the server
+
+``` python
+>>> from pykeepass_cache import close
+>>> close()
+```
+
 ### Tests
 
 `python tests/tests.py`
