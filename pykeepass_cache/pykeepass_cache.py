@@ -107,11 +107,6 @@ def _fork_and_run(func, *, timeout, socket_path, no_start=False):
     try:
         conn = unix_connect(
             socket_path,
-            config={
-                'allow_all_attrs': True,
-                'allow_set_attr': True,
-                'allow_get_attr': True,
-            },
         )
         return func(conn)
 
@@ -141,8 +136,8 @@ def _fork_and_run(func, *, timeout, socket_path, no_start=False):
                         socket_path=socket_path,
                         protocol_config={
                             'allow_all_attrs': True,
-                            'allow_set_attr': True,
-                            'allow_get_attr': True,
+                            'allow_setattr': True,
+                            'allow_getattr': True,
                         },
                         # initial timeout before any client connects
                         listener_timeout=timeout
@@ -159,11 +154,6 @@ def _fork_and_run(func, *, timeout, socket_path, no_start=False):
                 time.sleep(0.05)
             conn = unix_connect(
                 socket_path,
-                config={
-                    'allow_all_attrs': True,
-                    'allow_set_attr': True,
-                    'allow_get_attr': True,
-                },
             )
             return func(conn)
 
