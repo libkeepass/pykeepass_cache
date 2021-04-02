@@ -115,11 +115,11 @@ def _fork_and_run(func, *, timeout, socket_path, no_start=False):
         )
         return func(conn)
 
-    except (FileNotFoundError, ConnectionRefusedError):
+    except (FileNotFoundError, ConnectionRefusedError) as e:
 
         # if no_start provided and server not running, do nothing
         if no_start:
-            return
+            raise e
 
         # handle ConnectionRefusedError - clean up old socket
         if os.path.exists(socket_path):
