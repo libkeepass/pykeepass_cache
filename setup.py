@@ -10,7 +10,7 @@ setup(
     long_description_content_type='text/markdown',
     author="Evan Widloski",
     author_email="evan@evanw.org",
-    url="https://github.com/evidlo/pykeepass-cache",
+    url="https://github.com/evidlo/pykeepass_cache",
     packages=find_packages(),
     install_requires=[
         "pykeepass",
